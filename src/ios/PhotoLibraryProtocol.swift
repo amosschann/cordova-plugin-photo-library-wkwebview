@@ -46,9 +46,16 @@ import Photos
                     return
                 }
                 
-                if PHPhotoLibrary.authorizationStatus() != .authorized {
-                    self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
-                    return
+                if #available(iOS 14, *) {
+                    if PHPhotoLibrary.authorizationStatus(for: .readWrite) != .authorized {
+                        self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
+                        return
+                    }
+                } else {
+                    if PHPhotoLibrary.authorizationStatus() != .authorized {
+                        self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
+                        return
+                    }
                 }
                 
                 let service = PhotoLibraryService.instance
@@ -176,3 +183,4 @@ import Photos
     }
     
 }
+
