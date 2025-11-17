@@ -1,6 +1,8 @@
 import Photos
 import Foundation
-import AssetsLibrary // TODO: needed for deprecated functionality
+#if canImport(AssetsLibrary)
+import AssetsLibrary
+#endif
 import MobileCoreServices
 
 extension PHAsset {
@@ -812,3 +814,4 @@ final class PhotoLibraryService {
     }
 
 }
+
