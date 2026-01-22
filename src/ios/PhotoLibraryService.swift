@@ -673,33 +673,23 @@ final class PhotoLibraryService {
         quality: Float
     ) -> PictureData? {
 
-        var data: Data?
-        var mimeType: String?
+        let data: Data?
+        let mimeType: String
 
         if imageHasAlpha(image) {
-            if #available(iOS 11.0, *) {
-                data = image.pngData()
-            } else {
-                data = UIImagePNGRepresentation(image)
-            }
-            mimeType = data != nil ? "image/png" : nil
+            data = UIImagePNGRepresentation(image)
+            mimeType = "image/png"
         } else {
-            let q = CGFloat(quality)
-            if #available(iOS 11.0, *) {
-                data = image.jpegData(compressionQuality: q)
-            } else {
-                data = UIImageJPEGRepresentation(image, q)
-            }
-            mimeType = data != nil ? "image/jpeg" : nil
+            data = UIImageJPEGRepresentation(image, CGFloat(quality))
+            mimeType = "image/jpeg"
         }
 
-        guard let d = data, let m = mimeType else {
+        guard let d = data else {
             return nil
         }
 
-        return PictureData(data: d, mimeType: m)
+        return PictureData(data: d, mimeType: mimeType)
     }
-
 
     fileprivate static func imageHasAlpha(_ image: UIImage) -> Bool {
         let alphaInfo = (image.cgImage)?.alphaInfo
