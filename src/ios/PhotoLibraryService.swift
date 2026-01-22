@@ -211,7 +211,7 @@ final class PhotoLibraryService {
                 let options = PHImageRequestOptions()
                 options.isNetworkAccessAllowed = true
 
-                requestImageData(asset: asset, options: options) { data in
+                self.requestImageData(asset: asset, options: options) { data in
                     guard let data = data else {
                         completion(nil)
                         return
@@ -359,7 +359,7 @@ final class PhotoLibraryService {
 
             let asset = obj as! PHAsset
 
-            requestImageData(asset: asset, options: self.imageRequestOptions) { data in
+            self.requestImageData(asset: asset, options: self.imageRequestOptions) { data in
             guard let data = data, let image = UIImage(data: data) else {
                 completion(nil)
                 return
@@ -387,7 +387,7 @@ final class PhotoLibraryService {
             let mediaType = mimeType.components(separatedBy: "/")[0]
 
             if(mediaType == "image") {
-                requestImageData(asset: asset, options: self.imageRequestOptions) { data in
+                self.requestImageData(asset: asset, options: self.imageRequestOptions) { data in
                     guard let data = data else {
                         completion(nil)
                         return
@@ -684,10 +684,11 @@ final class PhotoLibraryService {
             }
             mimeType = data != nil ? "image/png" : nil
         } else {
+            let q = CGFloat(quality)
             if #available(iOS 11.0, *) {
-                data = image.jpegData(compressionQuality: CGFloat(quality))
+                data = image.jpegData(compressionQuality: q)
             } else {
-                data = UIImageJPEGRepresentation(image, CGFloat(quality))
+                data = UIImageJPEGRepresentation(image, q)
             }
             mimeType = data != nil ? "image/jpeg" : nil
         }
