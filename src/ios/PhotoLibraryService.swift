@@ -1,6 +1,5 @@
 import Photos
 import Foundation
-import UniformTypeIdentifiers
 
 extension PHAsset {
 
@@ -99,8 +98,12 @@ final class PhotoLibraryService {
     }
 
     static func hasPermission() -> Bool {
-        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        return status == .authorized || status == .limited
+        if #available(iOS 14.0, *) {
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            return status == .authorized || status == .limited
+        } else {
+            return PHPhotoLibrary.authorizationStatus() == .authorized
+        }
     }
 
     func getLibrary(_ options: PhotoLibraryGetLibraryOptions, completion: @escaping (_ result: [NSDictionary], _ chunkNum: Int, _ isLastChunk: Bool) -> Void) {
@@ -181,14 +184,8 @@ final class PhotoLibraryService {
 
 
     func mimeTypeForPath(path: String) -> String {
-        let url = URL(fileURLWithPath: path)
-        guard let ext = url.pathExtension.lowercased(),
-            let utType = UTType(filenameExtension: ext),
-            let mime = utType.preferredMIMEType
-        else {
-            return "application/octet-stream"
-        }
-        return mime
+        let ext = (path as NSString).pathExtension.lowercased()
+        return mimeTypes[ext] ?? "application/octet-stream"
     }
 
 
@@ -211,32 +208,23 @@ final class PhotoLibraryService {
             let asset = obj as! PHAsset
 
             if(mediaType == "image") {
-                PHImageManager.default().requestImageDataAndOrientation(for: asset, options: self.imageRequestOptions) {
-                    (imageData: Data?, dataUTI: String?, orientation: UIImage.Orientation, info: [AnyHashable: Any]?) in
+                let options = PHImageRequestOptions()
+                options.isNetworkAccessAllowed = true
 
-                    if(imageData == nil) {
+                PHImageManager.default().requestImageDataAndOrientation(
+                    for: asset,
+                    options: options
+                ) { data, _, _, _ in
+                    guard let data = data else {
                         completion(nil)
+                        return
                     }
-                    else {
-                        let options = PHImageRequestOptions()
-                        options.isNetworkAccessAllowed = true
 
-                        PHImageManager.default().requestImageDataAndOrientation(
-                            for: asset,
-                            options: options
-                        ) { data, _, _, _ in
-                            guard let data = data else {
-                                completion(nil)
-                                return
-                            }
+                    let tmpURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(UUID().uuidString)
 
-                            let tmpURL = FileManager.default.temporaryDirectory
-                                .appendingPathComponent(UUID().uuidString)
-
-                            try? data.write(to: tmpURL)
-                            completion(tmpURL.path)
-                        }
-                    }
+                    try? data.write(to: tmpURL)
+                    completion(tmpURL.path)
                 }
             }
             else if(mediaType == "video") {
@@ -274,10 +262,16 @@ final class PhotoLibraryService {
         libraryItem["width"] = asset.pixelWidth
         libraryItem["height"] = asset.pixelHeight
 
-        let fname = libraryItem["fileName"] as! String
-        libraryItem["mimeType"] = self.mimeTypeForPath(path: fname)
+        if let fname = libraryItem["fileName"] as? String {
+            libraryItem["mimeType"] = mimeTypeForPath(path: fname)
+        } else {
+            libraryItem["mimeType"] = "application/octet-stream"
+        }
 
-        libraryItem["creationDate"] = self.dateFormatter.string(from: asset.creationDate!)
+
+        if let date = asset.creationDate {
+            libraryItem["creationDate"] = self.dateFormatter.string(from: date)
+        }
         if let location = asset.location {
             libraryItem["latitude"] = location.coordinate.latitude
             libraryItem["longitude"] = location.coordinate.longitude
@@ -483,38 +477,45 @@ final class PhotoLibraryService {
 
     }
 
-    func requestAuthorization(_ success: @escaping () -> Void, failure: @escaping (_ err: String) -> Void ) {
+    func requestAuthorization(
+        _ success: @escaping () -> Void,
+        failure: @escaping (_ err: String) -> Void
+    ) {
+        if #available(iOS 14.0, *) {
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
 
-        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            if status == .authorized || status == .limited {
+                success()
+                return
+            }
 
-        if status == .authorized || status == .limited {
-            success()
-            return 
-        } 
-
-        if status == .notDetermined {
-            // Ask for permission
-            PHPhotoLibrary.requestAuthorization() { (status) -> Void in
-                switch status {
-                case .authorized:
-                    success()
-                default:
-                    failure("requestAuthorization denied by user")
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
+                DispatchQueue.main.async {
+                    if newStatus == .authorized || newStatus == .limited {
+                        success()
+                    } else {
+                        failure("requestAuthorization denied by user")
+                    }
                 }
             }
-            return
-        }
-
-        // Permission was manually denied by user, open settings screen
-        let settingsUrl = URL(string: UIApplication.openSettingsURLString)
-        if let url = settingsUrl {
-            UIApplication.shared.open(url, options: [:], completionHandler: nil)
-            // TODO: run callback only when return ?
-            // Do not call success, as the app will be restarted when user changes permission
         } else {
-            failure("could not open settings url")
-        }
+            let status = PHPhotoLibrary.authorizationStatus()
 
+            if status == .authorized {
+                success()
+                return
+            }
+
+            PHPhotoLibrary.requestAuthorization { newStatus in
+                DispatchQueue.main.async {
+                    if newStatus == .authorized {
+                        success()
+                    } else {
+                        failure("requestAuthorization denied by user")
+                    }
+                }
+            }
+        }
     }
 
     // as described here: http://stackoverflow.com/questions/11972185/ios-save-photo-in-an-app-specific-album
