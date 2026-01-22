@@ -211,10 +211,7 @@ final class PhotoLibraryService {
                 let options = PHImageRequestOptions()
                 options.isNetworkAccessAllowed = true
 
-                PHImageManager.default().requestImageDataAndOrientation(
-                    for: asset,
-                    options: options
-                ) { data, _, _, _ in
+                requestImageData(asset: asset, options: options) { data in
                     guard let data = data else {
                         completion(nil)
                         return
@@ -362,18 +359,14 @@ final class PhotoLibraryService {
 
             let asset = obj as! PHAsset
 
-            PHImageManager.default().requestImageDataAndOrientation(for: asset, options: self.imageRequestOptions) {
-                (imageData: Data?, dataUTI: String?, orientation: UIImage.Orientation, info: [AnyHashable: Any]?) in
-
-                guard let image = imageData != nil ? UIImage(data: imageData!) : nil else {
-                    completion(nil)
-                    return
-                }
-
-                let imageData = PhotoLibraryService.image2PictureData(image, quality: 1.0)
-
-                completion(imageData)
+            requestImageData(asset: asset, options: self.imageRequestOptions) { data in
+            guard let data = data, let image = UIImage(data: data) else {
+                completion(nil)
+                return
             }
+
+            completion(PhotoLibraryService.image2PictureData(image, quality: 1.0))
+        }
         })
     }
 
@@ -394,18 +387,14 @@ final class PhotoLibraryService {
             let mediaType = mimeType.components(separatedBy: "/")[0]
 
             if(mediaType == "image") {
-                PHImageManager.default().requestImageDataAndOrientation(for: asset, options: self.imageRequestOptions) {
-                    (imageData: Data?, dataUTI: String?, orientation: UIImage.Orientation, info: [AnyHashable: Any]?) in
-
-                    if(imageData == nil) {
+                requestImageData(asset: asset, options: self.imageRequestOptions) { data in
+                    guard let data = data else {
                         completion(nil)
+                        return
                     }
-                    else {
-//                        let file_url:URL = info!["PHImageFileURLKey"] as! URL
-//                        let mime_type = self.mimeTypes[file_url.pathExtension.lowercased()]
-                        completion(imageData!.base64EncodedString())
-                    }
+                    completion(data.base64EncodedString())
                 }
+
             }
             else if(mediaType == "video") {
 
@@ -679,33 +668,65 @@ final class PhotoLibraryService {
         }
     }
 
-    fileprivate static func image2PictureData(_ image: UIImage, quality: Float) -> PictureData? {
-        //        This returns raw data, but mime type is unknown. Anyway, crodova performs base64 for messageAsArrayBuffer, so there's no performance gain visible
-        //        let provider: CGDataProvider = CGImageGetDataProvider(image.CGImage)!
-        //        let data = CGDataProviderCopyData(provider)
-        //        return data;
+    fileprivate static func image2PictureData(
+        _ image: UIImage,
+        quality: Float
+    ) -> PictureData? {
 
         var data: Data?
         var mimeType: String?
 
-        if (imageHasAlpha(image)){
-            data = image.pngData()
+        if imageHasAlpha(image) {
+            if #available(iOS 11.0, *) {
+                data = image.pngData()
+            } else {
+                data = UIImagePNGRepresentation(image)
+            }
             mimeType = data != nil ? "image/png" : nil
         } else {
-            data = image.jpegData(compressionQuality: CGFloat(quality))
+            if #available(iOS 11.0, *) {
+                data = image.jpegData(compressionQuality: CGFloat(quality))
+            } else {
+                data = UIImageJPEGRepresentation(image, CGFloat(quality))
+            }
             mimeType = data != nil ? "image/jpeg" : nil
         }
 
-        if data != nil && mimeType != nil {
-            return PictureData(data: data!, mimeType: mimeType!)
+        guard let d = data, let m = mimeType else {
+            return nil
         }
-        return nil
+
+        return PictureData(data: d, mimeType: m)
     }
+
 
     fileprivate static func imageHasAlpha(_ image: UIImage) -> Bool {
         let alphaInfo = (image.cgImage)?.alphaInfo
         return alphaInfo == .first || alphaInfo == .last || alphaInfo == .premultipliedFirst || alphaInfo == .premultipliedLast
     }
+
+    private func requestImageData(
+        asset: PHAsset,
+        options: PHImageRequestOptions,
+        completion: @escaping (Data?) -> Void
+    ) {
+        if #available(iOS 13.0, *) {
+            PHImageManager.default().requestImageDataAndOrientation(
+                for: asset,
+                options: options
+            ) { data, _, _, _ in
+                completion(data)
+            }
+        } else {
+            PHImageManager.default().requestImageData(
+                for: asset,
+                options: options
+            ) { data, _, _, _ in
+                completion(data)
+            }
+        }
+    }
+
 
 
 }
