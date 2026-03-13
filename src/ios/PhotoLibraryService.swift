@@ -1,5 +1,6 @@
 import Photos
 import Foundation
+import AVFoundation
 
 extension PHAsset {
 
@@ -54,6 +55,7 @@ final class PhotoLibraryService {
     ]
 
     static let PERMISSION_ERROR = "Permission Denial: This application is not allowed to access Photo data."
+    static let ASSET_UNAVAILABLE_ERROR = "Could not fetch the requested asset. It may be unavailable or outside the app's limited photo library access."
 
     let dataURLPattern = try! NSRegularExpression(pattern: "^data:.+?;base64,", options: NSRegularExpression.Options(rawValue: 0))
 
@@ -97,13 +99,17 @@ final class PhotoLibraryService {
 
     }
 
-    static func hasPermission() -> Bool {
+    static func authorizationStatus() -> PHAuthorizationStatus {
         if #available(iOS 14.0, *) {
-            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            return status == .authorized || status == .limited
+            return PHPhotoLibrary.authorizationStatus(for: .readWrite)
         } else {
-            return PHPhotoLibrary.authorizationStatus() == .authorized
+            return PHPhotoLibrary.authorizationStatus()
         }
+    }
+
+    static func hasPermission() -> Bool {
+        let status = authorizationStatus()
+        return status == .authorized || status == .limited
     }
 
     func getLibrary(_ options: PhotoLibraryGetLibraryOptions, completion: @escaping (_ result: [NSDictionary], _ chunkNum: Int, _ isLastChunk: Bool) -> Void) {
@@ -225,19 +231,8 @@ final class PhotoLibraryService {
                 }
             }
             else if(mediaType == "video") {
-
-                PHImageManager.default().requestAVAsset(forVideo: asset, options: nil, resultHandler: { (avAsset: AVAsset?, avAudioMix: AVAudioMix?, info: [AnyHashable : Any]?) in
-
-                    if( avAsset is AVURLAsset ) {
-                        let video_asset = avAsset as! AVURLAsset
-                        let url = URL(fileURLWithPath: video_asset.url.relativePath)
-                        completion(url.relativePath)
-                    }
-                    else if(avAsset is AVComposition) {
-                        let token = info?["PHImageFileSandboxExtensionTokenKey"] as! String
-                        let path = token.components(separatedBy: ";").last
-                        completion(path)
-                    }
+                self.requestVideoFileURL(asset: asset) { url in
+                    completion(url?.path)
                 })
             }
             else if(mediaType == "audio") {
@@ -397,11 +392,11 @@ final class PhotoLibraryService {
 
             }
             else if(mediaType == "video") {
-
-                PHImageManager.default().requestAVAsset(forVideo: asset, options: nil, resultHandler: { (avAsset: AVAsset?, avAudioMix: AVAudioMix?, info: [AnyHashable : Any]?) in
-
-                    let video_asset = avAsset as! AVURLAsset
-                    let url = URL(fileURLWithPath: video_asset.url.relativePath)
+                self.requestVideoFileURL(asset: asset) { url in
+                    guard let url = url else {
+                        completion(nil)
+                        return
+                    }
 
                     do {
                         let video_data = try Data(contentsOf: url)
@@ -412,7 +407,7 @@ final class PhotoLibraryService {
                     catch _ {
                         completion(nil)
                     }
-                })
+                }
             }
             else if(mediaType == "audio") {
                 // TODO:
@@ -439,20 +434,21 @@ final class PhotoLibraryService {
             let asset = obj as! PHAsset
 
 
-            PHImageManager.default().requestAVAsset(forVideo: asset, options: nil, resultHandler: { (avAsset: AVAsset?, avAudioMix: AVAudioMix?, info: [AnyHashable : Any]?) in
-
-                let video_asset = avAsset as! AVURLAsset
-                let url = URL(fileURLWithPath: video_asset.url.relativePath)
+            self.requestVideoFileURL(asset: asset) { url in
+                guard let url = url else {
+                    completion(nil)
+                    return
+                }
 
                 do {
                     let video_data = try Data(contentsOf: url)
-                    let pic_data = PictureData(data: video_data, mimeType: "video/quicktime") // TODO: get mime from info dic ?
+                    let pic_data = PictureData(data: video_data, mimeType: self.mimeTypeForPath(path: url.path))
                     completion(pic_data)
                 }
                 catch _ {
                     completion(nil)
                 }
-            })
+            }
         })
     }
 
@@ -715,6 +711,120 @@ final class PhotoLibraryService {
             ) { data, _, _, _ in
                 completion(data)
             }
+        }
+    }
+
+    private func requestVideoFileURL(asset: PHAsset, completion: @escaping (URL?) -> Void) {
+        let options = PHVideoRequestOptions()
+        options.version = .current
+        options.deliveryMode = .automatic
+        options.isNetworkAccessAllowed = true
+
+        PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, info in
+            if let error = info?[PHImageErrorKey] as? NSError {
+                NSLog("PhotoLibraryService requestAVAsset failed for %@: %@", asset.localIdentifier, error.localizedDescription)
+                completion(nil)
+                return
+            }
+
+            guard let avAsset = avAsset else {
+                if let cancelled = info?[PHImageCancelledKey] as? Bool, cancelled {
+                    NSLog("PhotoLibraryService requestAVAsset cancelled for %@", asset.localIdentifier)
+                } else {
+                    NSLog("PhotoLibraryService requestAVAsset returned nil for %@", asset.localIdentifier)
+                }
+                completion(nil)
+                return
+            }
+
+            if let urlAsset = avAsset as? AVURLAsset {
+                completion(urlAsset.url)
+                return
+            }
+
+            self.exportVideoAssetToTemporaryFile(avAsset, originalFileName: asset.fileName, completion: completion)
+        }
+    }
+
+    private func exportVideoAssetToTemporaryFile(
+        _ asset: AVAsset,
+        originalFileName: String?,
+        completion: @escaping (URL?) -> Void
+    ) {
+        let compatiblePresets = AVAssetExportSession.exportPresets(compatibleWith: asset)
+        let presetName = compatiblePresets.contains(AVAssetExportPresetPassthrough)
+            ? AVAssetExportPresetPassthrough
+            : AVAssetExportPresetHighestQuality
+
+        guard let exportSession = AVAssetExportSession(asset: asset, presetName: presetName) else {
+            NSLog("PhotoLibraryService could not create export session")
+            completion(nil)
+            return
+        }
+
+        guard let outputFileType = preferredVideoExportFileType(for: exportSession) else {
+            NSLog("PhotoLibraryService could not determine export file type")
+            completion(nil)
+            return
+        }
+
+        let fileExtension = pathExtension(
+            for: outputFileType,
+            fallback: (originalFileName as NSString?)?.pathExtension
+        )
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(fileExtension)
+
+        exportSession.outputURL = outputURL
+        exportSession.outputFileType = outputFileType
+        exportSession.shouldOptimizeForNetworkUse = false
+
+        exportSession.exportAsynchronously {
+            switch exportSession.status {
+            case .completed:
+                completion(outputURL)
+            case .failed:
+                NSLog(
+                    "PhotoLibraryService export failed: %@",
+                    exportSession.error?.localizedDescription ?? "unknown error"
+                )
+                completion(nil)
+            case .cancelled:
+                NSLog("PhotoLibraryService export cancelled")
+                completion(nil)
+            default:
+                completion(nil)
+            }
+        }
+    }
+
+    private func preferredVideoExportFileType(for exportSession: AVAssetExportSession) -> AVFileType? {
+        if exportSession.supportedFileTypes.contains(.mov) {
+            return .mov
+        }
+        if exportSession.supportedFileTypes.contains(.mp4) {
+            return .mp4
+        }
+        if exportSession.supportedFileTypes.contains(.m4v) {
+            return .m4v
+        }
+        return exportSession.supportedFileTypes.first
+    }
+
+    private func pathExtension(for fileType: AVFileType, fallback: String?) -> String {
+        switch fileType {
+        case .mov:
+            return "mov"
+        case .mp4:
+            return "mp4"
+        case .m4v:
+            return "m4v"
+        default:
+            if let fallback = fallback, !fallback.isEmpty {
+                return fallback.lowercased()
+            }
+            return "mov"
         }
     }
 

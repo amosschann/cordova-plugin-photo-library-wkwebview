@@ -4,6 +4,15 @@ import Photos
 @objc(PhotoLibrary) class PhotoLibrary : CDVPlugin {
 
     lazy var concurrentQueue: DispatchQueue = DispatchQueue(label: "photo-library.queue.plugin", qos: DispatchQoS.utility, attributes: [.concurrent])
+
+    private func hasPhotoLibraryAccess() -> Bool {
+        return PhotoLibraryService.hasPermission()
+    }
+
+    private func sendPermissionError(callbackId: String) {
+        let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
+        self.commandDelegate!.send(pluginResult, callbackId: callbackId)
+    }
     
     override func pluginInitialize() {
 
@@ -23,9 +32,8 @@ import Photos
     @objc func getLibrary(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
 
-            if PHPhotoLibrary.authorizationStatus() != .authorized {
-                let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
-                self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
+            if !self.hasPhotoLibraryAccess() {
+                self.sendPermissionError(callbackId: command.callbackId)
                 return
             }
 
@@ -80,9 +88,8 @@ import Photos
     @objc func getAlbums(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
             
-            if PHPhotoLibrary.authorizationStatus() != .authorized {
-                let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
-                self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
+            if !self.hasPhotoLibraryAccess() {
+                self.sendPermissionError(callbackId: command.callbackId)
                 return
             }
             
@@ -99,7 +106,7 @@ import Photos
     
     @objc func isAuthorized(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
-            let pluginResult = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: PHPhotoLibrary.authorizationStatus() != .authorized)
+            let pluginResult = CDVPluginResult(status: CDVCommandStatus_OK, messageAs: self.hasPhotoLibraryAccess())
             self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
         }
     }
@@ -108,9 +115,8 @@ import Photos
     @objc func getThumbnail(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
 
-            if PHPhotoLibrary.authorizationStatus() != .authorized {
-                let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
-                self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
+            if !self.hasPhotoLibraryAccess() {
+                self.sendPermissionError(callbackId: command.callbackId)
                 return
             }
 
@@ -131,7 +137,7 @@ import Photos
                     :
                     CDVPluginResult(
                         status: CDVCommandStatus_ERROR,
-                        messageAs: "Could not fetch the thumbnail")
+                        messageAs: PhotoLibraryService.ASSET_UNAVAILABLE_ERROR)
 
                 self.commandDelegate!.send(pluginResult, callbackId: command.callbackId )
 
@@ -143,9 +149,8 @@ import Photos
     @objc func getPhoto(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
 
-            if PHPhotoLibrary.authorizationStatus() != .authorized {
-                let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
-                self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
+            if !self.hasPhotoLibraryAccess() {
+                self.sendPermissionError(callbackId: command.callbackId)
                 return
             }
 
@@ -162,7 +167,7 @@ import Photos
                     :
                     CDVPluginResult(
                         status: CDVCommandStatus_ERROR,
-                        messageAs: "Could not fetch the image")
+                        messageAs: PhotoLibraryService.ASSET_UNAVAILABLE_ERROR)
 
                 self.commandDelegate!.send(pluginResult, callbackId: command.callbackId	)
             }
@@ -173,9 +178,8 @@ import Photos
     @objc func getLibraryItem(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
             
-            if PHPhotoLibrary.authorizationStatus() != .authorized {
-                let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
-                self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
+            if !self.hasPhotoLibraryAccess() {
+                self.sendPermissionError(callbackId: command.callbackId)
                 return
             }
             
@@ -197,7 +201,7 @@ import Photos
             :
             CDVPluginResult(
                 status: CDVCommandStatus_ERROR,
-                messageAs: "Could not fetch the image")
+                messageAs: PhotoLibraryService.ASSET_UNAVAILABLE_ERROR)
         
         self.commandDelegate!.send(pluginResult, callbackId: callbackId)
 
@@ -231,9 +235,8 @@ import Photos
 
     @objc func saveImage(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
-            if PHPhotoLibrary.authorizationStatus() != .authorized {
-                let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
-                self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
+            if !self.hasPhotoLibraryAccess() {
+                self.sendPermissionError(callbackId: command.callbackId)
                 return
             }
 
@@ -259,9 +262,8 @@ import Photos
     @objc func saveVideo(_ command: CDVInvokedUrlCommand) {
         concurrentQueue.async {
 
-            if PHPhotoLibrary.authorizationStatus() != .authorized {
-                let pluginResult = CDVPluginResult(status: CDVCommandStatus_ERROR, messageAs: PhotoLibraryService.PERMISSION_ERROR)
-                self.commandDelegate!.send(pluginResult, callbackId: command.callbackId)
+            if !self.hasPhotoLibraryAccess() {
+                self.sendPermissionError(callbackId: command.callbackId)
                 return
             }
 

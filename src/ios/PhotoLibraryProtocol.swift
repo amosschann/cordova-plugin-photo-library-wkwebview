@@ -46,16 +46,9 @@ import Photos
                     return
                 }
                 
-                if #available(iOS 14, *) {
-                    if PHPhotoLibrary.authorizationStatus(for: .readWrite) != .authorized {
-                        self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
-                        return
-                    }
-                } else {
-                    if PHPhotoLibrary.authorizationStatus() != .authorized {
-                        self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
-                        return
-                    }
+                if !PhotoLibraryService.hasPermission() {
+                    self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
+                    return
                 }
                 
                 let service = PhotoLibraryService.instance
@@ -86,7 +79,7 @@ import Photos
                     concurrentQueue.addOperation {
                         service.getThumbnail(photoId!, thumbnailWidth: width!, thumbnailHeight: height!, quality: quality!) { (imageData) in
                             if (imageData == nil) {
-                                self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
+                                self.sendErrorResponse(404, error: PhotoLibraryService.ASSET_UNAVAILABLE_ERROR)
                                 return
                             }
                             self.sendResponseWithResponseCode(200, data: imageData!.data, mimeType: imageData!.mimeType)
@@ -100,7 +93,7 @@ import Photos
                     concurrentQueue.addOperation {
                         service.getPhoto(photoId!) { (imageData) in
                             if (imageData == nil) {
-                                self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
+                                self.sendErrorResponse(404, error: PhotoLibraryService.ASSET_UNAVAILABLE_ERROR)
                                 return
                             }
                             self.sendResponseWithResponseCode(200, data: imageData!.data, mimeType: imageData!.mimeType)
@@ -114,7 +107,7 @@ import Photos
                     concurrentQueue.addOperation {
                         service.getVideo(photoId!) { (videoData) in
                             if (videoData == nil) {
-                                self.sendErrorResponse(404, error: PhotoLibraryService.PERMISSION_ERROR)
+                                self.sendErrorResponse(404, error: PhotoLibraryService.ASSET_UNAVAILABLE_ERROR)
                                 return
                             }
                             self.sendResponseWithResponseCode(200, data: videoData!.data, mimeType: videoData!.mimeType)
