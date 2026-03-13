@@ -109,7 +109,11 @@ final class PhotoLibraryService {
 
     static func hasPermission() -> Bool {
         let status = authorizationStatus()
-        return status == .authorized || status == .limited
+        if #available(iOS 14.0, *) {
+            return status == .authorized || status == .limited
+        } else {
+            return status == .authorized
+        }
     }
 
     func getLibrary(_ options: PhotoLibraryGetLibraryOptions, completion: @escaping (_ result: [NSDictionary], _ chunkNum: Int, _ isLastChunk: Bool) -> Void) {
@@ -233,7 +237,7 @@ final class PhotoLibraryService {
             else if(mediaType == "video") {
                 self.requestVideoFileURL(asset: asset) { url in
                     completion(url?.path)
-                })
+                }
             }
             else if(mediaType == "audio") {
                 // TODO:
