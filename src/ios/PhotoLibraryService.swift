@@ -568,6 +568,8 @@ final class PhotoLibraryService {
         album: String,
         completion: @escaping (_ libraryItem: NSDictionary?, _ error: String?) -> Void
     ) {
+        let albumCollection = PhotoLibraryService.getOrCreateAlbum(album)
+
         PHPhotoLibrary.shared().performChanges({
 
             let creationRequest = PHAssetCreationRequest.forAsset()
@@ -579,10 +581,10 @@ final class PhotoLibraryService {
 
             let placeholder = creationRequest.placeholderForCreatedAsset
 
-            if let albumCollection = PhotoLibraryService.getOrCreateAlbum(album),
+            if let collection = albumCollection,
             let placeholder = placeholder {
                 let albumChangeRequest =
-                    PHAssetCollectionChangeRequest(for: albumCollection)
+                    PHAssetCollectionChangeRequest(for: collection)
                 albumChangeRequest?.addAssets([placeholder] as NSArray)
             }
 
@@ -622,6 +624,8 @@ final class PhotoLibraryService {
         album: String,
         completion: @escaping (_ libraryItem: NSDictionary?, _ error: String?) -> Void
     ) {
+        let albumCollection = PhotoLibraryService.getOrCreateAlbum(album)
+
         PHPhotoLibrary.shared().performChanges({
 
             let creationRequest = PHAssetCreationRequest.forAsset()
@@ -633,10 +637,10 @@ final class PhotoLibraryService {
 
             let placeholder = creationRequest.placeholderForCreatedAsset
 
-            if let albumCollection = PhotoLibraryService.getOrCreateAlbum(album),
+            if let collection = albumCollection,
             let placeholder = placeholder {
                 let albumChangeRequest =
-                    PHAssetCollectionChangeRequest(for: albumCollection)
+                    PHAssetCollectionChangeRequest(for: collection)
                 albumChangeRequest?.addAssets([placeholder] as NSArray)
             }
 
