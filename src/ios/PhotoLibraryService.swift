@@ -587,10 +587,12 @@ final class PhotoLibraryService {
             }
 
         }) { success, error in
-            if success {
-                completion(nil, nil)   // optionally fetch asset later
-            } else {
-                completion(nil, error?.localizedDescription)
+            DispatchQueue.main.async {
+                if success {
+                    completion(nil, nil)   // optionally fetch asset later
+                } else {
+                    completion(nil, error?.localizedDescription)
+                }
             }
         }
     }
@@ -639,10 +641,12 @@ final class PhotoLibraryService {
             }
 
         }) { success, error in
-            if success {
-                completion(nil, nil)
-            } else {
-                completion(nil, error?.localizedDescription)
+            DispatchQueue.main.async {
+                if success {
+                    completion(nil, nil)
+                } else {
+                    completion(nil, error?.localizedDescription)
+                }
             }
         }
     }
