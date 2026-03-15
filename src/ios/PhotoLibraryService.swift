@@ -512,27 +512,30 @@ final class PhotoLibraryService {
     // TODO: should return library item
     /// Ensures the app has gone through PHPhotoLibrary.requestAuthorization before performing changes.
     /// Calling this before performChanges avoids "com.apple.accounts Code=7" daemon errors on some devices.
+    /// Must run on the main thread so the permission UI and daemon behave correctly.
     private func ensurePhotoLibraryAuthorizationForWrite(completion: @escaping (Bool) -> Void) {
-        if #available(iOS 14.0, *) {
-            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-            if status == .authorized || status == .limited {
-                DispatchQueue.main.async { completion(true) }
-                return
-            }
-            PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
-                DispatchQueue.main.async {
-                    completion(newStatus == .authorized || newStatus == .limited)
+        DispatchQueue.main.async {
+            if #available(iOS 14.0, *) {
+                let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+                if status == .authorized || status == .limited {
+                    completion(true)
+                    return
                 }
-            }
-        } else {
-            let status = PHPhotoLibrary.authorizationStatus()
-            if status == .authorized {
-                DispatchQueue.main.async { completion(true) }
-                return
-            }
-            PHPhotoLibrary.requestAuthorization { newStatus in
-                DispatchQueue.main.async {
-                    completion(newStatus == .authorized)
+                PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
+                    DispatchQueue.main.async {
+                        completion(newStatus == .authorized || newStatus == .limited)
+                    }
+                }
+            } else {
+                let status = PHPhotoLibrary.authorizationStatus()
+                if status == .authorized {
+                    completion(true)
+                    return
+                }
+                PHPhotoLibrary.requestAuthorization { newStatus in
+                    DispatchQueue.main.async {
+                        completion(newStatus == .authorized)
+                    }
                 }
             }
         }
