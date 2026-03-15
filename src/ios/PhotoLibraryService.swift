@@ -510,6 +510,34 @@ final class PhotoLibraryService {
     // as described here: http://stackoverflow.com/questions/11972185/ios-save-photo-in-an-app-specific-album
     // but first find a way to save animated gif with it.
     // TODO: should return library item
+    /// Ensures the app has gone through PHPhotoLibrary.requestAuthorization before performing changes.
+    /// Calling this before performChanges avoids "com.apple.accounts Code=7" daemon errors on some devices.
+    private func ensurePhotoLibraryAuthorizationForWrite(completion: @escaping (Bool) -> Void) {
+        if #available(iOS 14.0, *) {
+            let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+            if status == .authorized || status == .limited {
+                DispatchQueue.main.async { completion(true) }
+                return
+            }
+            PHPhotoLibrary.requestAuthorization(for: .readWrite) { newStatus in
+                DispatchQueue.main.async {
+                    completion(newStatus == .authorized || newStatus == .limited)
+                }
+            }
+        } else {
+            let status = PHPhotoLibrary.authorizationStatus()
+            if status == .authorized {
+                DispatchQueue.main.async { completion(true) }
+                return
+            }
+            PHPhotoLibrary.requestAuthorization { newStatus in
+                DispatchQueue.main.async {
+                    completion(newStatus == .authorized)
+                }
+            }
+        }
+    }
+
     func saveImage(
         _ url: String,
         album: String,
@@ -523,6 +551,20 @@ final class PhotoLibraryService {
             return
         }
 
+        ensurePhotoLibraryAuthorizationForWrite { [weak self] authorized in
+            guard authorized, let self = self else {
+                completion(nil, PhotoLibraryService.PERMISSION_ERROR)
+                return
+            }
+            self.performSaveImage(imageData: imageData, album: album, completion: completion)
+        }
+    }
+
+    private func performSaveImage(
+        imageData: Data,
+        album: String,
+        completion: @escaping (_ libraryItem: NSDictionary?, _ error: String?) -> Void
+    ) {
         PHPhotoLibrary.shared().performChanges({
 
             let creationRequest = PHAssetCreationRequest.forAsset()
@@ -561,6 +603,20 @@ final class PhotoLibraryService {
             return
         }
 
+        ensurePhotoLibraryAuthorizationForWrite { [weak self] authorized in
+            guard authorized, let self = self else {
+                completion(nil, PhotoLibraryService.PERMISSION_ERROR)
+                return
+            }
+            self.performSaveVideo(videoURL: videoURL, album: album, completion: completion)
+        }
+    }
+
+    private func performSaveVideo(
+        videoURL: URL,
+        album: String,
+        completion: @escaping (_ libraryItem: NSDictionary?, _ error: String?) -> Void
+    ) {
         PHPhotoLibrary.shared().performChanges({
 
             let creationRequest = PHAssetCreationRequest.forAsset()
